@@ -1,0 +1,129 @@
+<テンプレートの設定>
+
+AWSTemplateFormatVersion: 2010-09-09
+Transform:
+- AWS::Serverless-2016-10-31
+- AWS::CodeStar
+
+--内容--
+AWSTemplateFormatVersionは、CloudFormationテンプレートのバージョンを指定します。このバージョンはテンプレートの構文と機能を定義します。
+Transformセクションは、このテンプレートがAWS SAM（Serverless Application Model）とAWS CodeStarのトランスフォームを使用していることを示します。これにより、サーバーレスアプリケーションのリソースを簡略化して記述し、CodeStarプロジェクトに統合するための特別な設定を行います。
+
+
+＜パラメータの定義＞
+
+Parameters:
+  ProjectId:
+    Type: String
+    Description: AWS CodeStar projectID used to associate new resources to team members
+  CodeDeployRole:
+    Type: String
+    Description: IAM role to allow AWS CodeDeploy to manage deployment of AWS Lambda functions
+  Stage:
+    Type: String
+    Description: The name for a project pipeline stage, such as Staging or Prod, for which resources are provisioned and deployed.
+    Default: ''
+
+--内容--
+Parametersセクションでは、テンプレートで使用されるパラメータを定義します。これにより、ユーザーはスタック作成時にカスタム値を指定できます。
+ProjectIdは、AWS CodeStarプロジェクトに関連付けるためのプロジェクトIDを指定します。
+CodeDeployRoleは、AWS CodeDeployがLambda関数のデプロイメントを管理するために必要なIAMロールのARN（Amazon Resource Name）を指定します。
+Stageは、プロジェクトパイプラインのステージ名を指定します。デフォルト値は空文字列です。
+
+
+＜グローバル設定＞
+
+Globals:
+  Function:
+    AutoPublishAlias: live
+    DeploymentPreference:
+      Enabled: true
+      Type: Canary10Percent5Minutes
+      Role:
+        Ref: CodeDeployRole
+
+--内容--
+Globalsセクションでは、サーバーレス関数のデフォルト設定を一括して指定します。これにより、リソースごとに重複する設定を回避できます。
+AutoPublishAlias: liveは、デプロイ後に自動的に「live」というエイリアスを作成することを指定します。
+DeploymentPreferenceは、関数のデプロイ方法を設定します。Canary10Percent5Minutesは、最初の5分間に10%のトラフィックを新しいバージョンに割り当てるカナリアリリースを指定しています。デプロイを管理するIAMロールはCodeDeployRoleパラメータで指定されています。
+
+
+＜リソースの定義＞
+
+①HelloWorld関数
+
+Resources:
+  HelloWorld:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName:
+        Fn::Sub: awscodestar-${ProjectId}-lambda-HelloWorld
+      Handler: index.handler
+      Runtime: nodejs16.x
+      Environment:
+        Variables:
+          NODE_ENV: production
+      Role:
+        Fn::GetAtt:
+        - LambdaExecutionRole
+        - Arn
+      Events:
+        GetEvent:
+          Type: Api
+          Properties:
+            Path: /
+            Method: get
+        PostEvent:
+          Type: Api
+          Properties:
+            Path: /
+            Method: post
+      CodeUri: s3://aws-codestar-ap-northeast-1-941920968752-funaba0601-back-pipe/676c11011300f6808b2da5cbc44c6c2d
+
+--内容--
+Resourcesセクションでは、スタック内で作成するリソースを定義します。
+
+HelloWorldリソースは、AWS Lambda関数を定義しています。
+Type: AWS::Serverless::FunctionはサーバーレスLambda関数を示します。
+Properties内の設定により、関数の名前、ハンドラ、ランタイム環境（Node.js 16.x）、環境変数、実行ロール、イベントトリガー、およびコードの場所を指定します。
+FunctionNameは、ProjectIdパラメータを使用して動的に生成されます。
+Handlerは、Lambda関数のエントリポイントを指定します。
+Environmentは、NODE_ENVという環境変数をproductionに設定しています。
+Roleは、関数に付与するIAMロールを指定し、LambdaExecutionRoleのARNを取得します。
+Eventsでは、API Gatewayを使用してGETおよびPOSTリクエストを受け取る設定をしています。
+CodeUriは、Lambda関数のコードが保存されているS3バケットの場所を指定します。
+
+
+②LambdaExecutionRole
+
+  LambdaExecutionRole:
+    Description: Creating service role in IAM for AWS Lambda
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName:
+        Fn::Sub: CodeStar-${ProjectId}-Execution${Stage}
+      AssumeRolePolicyDocument:
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - lambda.amazonaws.com
+          Action: sts:AssumeRole
+      Path: /
+      ManagedPolicyArns:
+      - Fn::Sub: arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      PermissionsBoundary:
+        Fn::Sub: arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/CodeStar_${ProjectId}_PermissionsBoundary
+
+--内容--
+LambdaExecutionRoleは、AWS Lambda用の実行ロールを定義します。
+Type: AWS::IAM::RoleはIAMロールを示します。
+RoleNameは、ProjectIdとStageパラメータを使用して動的に生成されます。
+AssumeRolePolicyDocumentでは、Lambdaサービスがこのロールを引き受けることを許可するポリシーを定義しています。
+Principalでlambda.amazonaws.comを指定し、Lambdaサービスを許可しています。
+Action: sts:AssumeRoleは、他のエンティティがこのロールを引き受けることを許可するアクションです。
+ManagedPolicyArnsでは、AWSLambdaBasicExecutionRoleというマネージドポリシーをロールにアタッチしています。このポリシーはLambda関数の基本的な実行権限を提供します。
+PermissionsBoundaryは、ProjectIdを使用して動的に生成されるIAMポリシーのARNを権限境界として指定します。これにより、ロールの許可を制限できます。
+
+
+	
