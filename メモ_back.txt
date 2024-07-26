@@ -295,6 +295,7 @@ CloudFormationTrustRole:
                 - cloudformation.amazonaws.com
 
 --内容--
+〇クラウドフォーメイションが使うためのロール
 
 DeletionPolicy:スタック削除時にリソースは残す
 Type:IAMロールのリソース
@@ -415,6 +416,8 @@ ToolChainRole:
 
 
 --内容--
+〇EC2 インスタンス用の IAM ロール
+
 DeletionPolicy:スタック削除時にリソースは残す
 Type:IAMRoleのリソース
 Description:メモ
@@ -532,21 +535,90 @@ ProjectPipeline:
       Name: !Sub '${ProjectId}-Pipeline'
 
 --内容--
+〇プロジェクトの構築およびデプロイメントのパイプラインを定義する部分
+　CI/CD（継続的インテグレーション／継続的デリバリー）の設定が含まれる
+
 DependsOn：下記を作ってからこのリソースを作成
   ToolChainRole、S3Bucket、CodeBuildProject、CloudFormationTrustRole
 Type：CodePipelineのリソース
 Description：メモ
 Properties：
   ArtifactStore：アーティファクトの保存場所の設定
-    Type: S3に保存
-    Location: S3Bucketに明示
-  Stages:
-    
+    Type: S3に保存（ビルドやデプロイのアーティファクトを保存）
+    Location: リソースはS3Bucketに明示
+  Stages:　ステージはパイプライン内で処理の単位のこと（ソース取得、ビルド、デプロイ）
+    Actions：　アクションは各ステージ内で実行される具体的な作業
 
+      ＜＜1.Sourceステージ＞＞
+        ActionTypeId：
+          Owner： アクションのオーナーはAWS
+          Category： アクションのカテゴリは「Source」（ソース取得）
+          Version： アクションのバージョンは1に設定
+          Provider： ソースコードの提供者はAWS CodeCommit
+        Configuration：
+          PollForSourceChanges: ソースコードの変更をポーリングして検出しない
+          RepositoryName： ソースコードを取得するCodeCommitリポジトリの名前を指定
+          BranchName： 取得するブランチ名を指定
+        InputArtifacts: []: 入力アーティファクトがなし
+        OutputArtifacts：
+          Name： 出力アーティファクトの名前
+        RunOrder：  ステージ内での実行順序を指定（1番目）
+        Name：  このアクションの名前を指定
+      Name: ステージの名前（Source）
 
+      ＜＜2.Buildステージ＞＞
+        ActionTypeId：
+          Owner： アクションのオーナーはAWS
+          Category： アクションのカテゴリは「Build」（ビルド）
+          Version： アクションのバージョンは1に設定
+          Provider： ビルドプロセスの提供者はAWS CodeBuild
+        Configuration：
+          RepositoryName： CodeBuildプロジェクトの名前を指定
+        InputArtifacts：　
+          Name： ビルドアクションに渡す入力アーティファクトの名前を指定
+        OutputArtifacts：
+          Name： ビルドアクションの出力アーティファクトの名前を指定
+        RunOrder：  ステージ内での実行順序を指定（1番目）
+        Name：  このアクションの名前を指定
+      Name: ステージの名前（Build）
 
+      ＜＜3.Deployステージ＞＞
+        ActionTypeId：アクション一つ目
+          Owner： アクションのオーナーはAWS
+          Category： アクションのカテゴリは「Deploy」（デプロイ）
+          Version： アクションのバージョンは1に設定
+          Provider： デプロイメントプロセスの提供者はAWS CloudFormation 
+        Configuration：
+          TemplatePath:　CloudFormationテンプレートのパスを指定
+          ActionMode: アクションの実行モードを「CHANGE_SET_REPLACE」に指定。変更セットを作成して既存のスタックを置き換える。
+          Capabilities: IAMロールの作成を許可
+          ParameterOverrides: CloudFormationテンプレートに渡すパラメータのオーバーライドを指定
+          TemplateConfiguration:　CloudFormationテンプレートの設定ファイルのパスを指定
+          ChangeSetName: 作成する変更セットの名前を指定
+          RoleArn: CloudFormationスタックを操作するためのIAMロールのARN
+          StackName: 更新するCloudFormationスタックの名前
+        InputArtifacts：　
+          Name： 入力アーティファクトの名前を指定（ビルドステージの出力を指定）
+        OutputArtifacts：出力なし
+        RunOrder：  ステージ内での実行順序を指定（1番目）
+        Name：  このアクションの名前を指定
 
-
+        ActionTypeId：アクション二つ目
+          Owner： アクションのオーナーはAWS
+          Category： アクションのカテゴリは「Deploy」（デプロイ）
+          Version： アクションのバージョンは1に設定
+          Provider： デプロイメントプロセスの提供者はAWS CloudFormation 
+        Configuration：
+          ActionMode: アクションの実行モードを「CHANGE_SET_EXECUTE」に指定。変更セットを実行する。
+          ChangeSetName：実行する変更セットの名前
+          StackName: 更新するCloudFormationスタックの名前
+        InputArtifacts：入力なし
+        OutputArtifacts：出力なし
+        RunOrder：  ステージ内での実行順序を指定（2番目）
+        Name：  このアクションの名前を指定
+      Name: ステージの名前（Deploy）
+      RoleArn：このパイプラインが使用するIAMロールのARN指定
+      Name: パイプラインの名前
 
 
 ⑤EnvironmentEC216fc7198ea10422698051b35f075e54f
@@ -568,6 +640,23 @@ EnvironmentEC216fc7198ea10422698051b35f075e54f:
 
 
 --内容--
+〇CloudFormation：AWS Cloud9環境を定義
+
+Type：AWS Cloud9のEC2環境を定義
+Properties：
+  Repositories：
+    PathComponent：Cloud9環境内でマウントするリポジトリのパス
+    RepositoryUrl：CodeCommitリポジトリのURL　Cloud9環境内でクローンされる
+  OwnerArn: Cloud9環境の所有者を指定するIAMユーザーのARN
+  Description: メモ
+  AutomaticStopTimeMinutes: Cloud9環境が自動的に停止するまでの時間を指定（30分）
+  ImageId: EC2インスタンスで使用するAmazon Machine Image (AMI)のID（Amazon Linux 2の64ビットx86版を指定）
+  SubnetId: Cloud9環境が配置されるVPCサブネットのID
+  InstanceType: EC2インスタンスのタイプ（t2.micro）
+  Name: Cloud9環境の名前
+
+
+
 
 ⑥S3ArtifactBucketPolicy
 
@@ -615,6 +704,45 @@ S3ArtifactBucketPolicy:
 
 
 --内容--
+〇S3バケットに設定するポリシーを定義　AWS CodePipelineがアクセスするために設定されたもの
+
+Type: S3バケットポリシーを設定
+Description: メモ
+Properties:
+Bucket: バケットポリシーが適用されるS3バケットの名前
+PolicyDocument:
+  Version:　ポリシーのバージョン
+  Statement:
+
+    ＜＜1.一つ目のポリシー＞＞
+    - Condition:
+        Bool:　HTTPSではなくHTTP経由でのアクセスを許可
+      Action:　以下3つのアクションを許可
+        　　　・'s3:GetObject'
+        　　　・'s3:GetObjectVersion'
+        　　　・'s3:GetBucketVersioning'
+      Resource:　S3Bucketのリソースが許可する対象
+      Effect: 許可
+      Principal:　ポリシーをアタッチするロールを指定
+        AWS: 以下2つのARNのロールを指定
+         　 ・ToolChainRole
+          　・CloudFormationTrustRole
+      Sid: ステートメントのID
+
+    ＜＜2.二つめのポリシー＞＞  
+    - Action:以下のアクションを許可
+        　　・'s3:PutObject'
+      Resource:　S3Bucketのリソースが許可する対象
+      Effect: 許可
+      Principal:
+        AWS:　以下のARNのロールを指定
+          　・ToolChainRole
+      Sid: ステートメントのID
+  Id: ポリシーのID
+
+
+
+
 
 ⑦CodeBuildProject
 
