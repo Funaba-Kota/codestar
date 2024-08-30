@@ -1015,3 +1015,92 @@ Conditions:
   CreateCodeBuildResources: !Equals 
     - true
     - true
+
+
+
+
+
+-------------------
+CloudFormationTrustRole										このCloudformationにつけるロール設定
+	DeletionPolicy							いいえ	"スタック削除時にリソースを残すか設定
+デフォルトは削除"	Retain：残す
+	Type							はい	リソースのタイプを設定	IAM Role
+	Description							いいえ	メモ	
+	Properties							はい	詳細設定	
+		Path						いいえ	"ロールへのパス
+デフォルトは「/」"	「/」ルート
+		RoleName						いいえ	"ロール名
+デフォルトは自動生成のID"	
+		Policies						いいえ	このロールのポリシーを設定	詳細は略
+			PolicyName					はい	ポリシー名	
+			PolicyDocument					はい	ポリシーの詳細	
+				Statement				はい		
+					Action			はい	なんの操作をか	
+					Resource			はい	どのリソースに対してか(ARN指定)	
+					Effect			はい	許可・拒否の設定	
+					Condition			いいえ	条件設定（満たしたときにこのポリシーを適応）	
+						StringEquals		いいえ	条件：完全一致	
+		AssumeRolePolicyDocument						はい	"このロールの信頼ポリシー
+どれがこのロールを引き受けれるか"	
+			Statement					はい		
+				Action				はい	なんの操作をか	sts:AssumeRole：ロールの引き受け
+				Effect				はい	許可・拒否の設定	許可
+				Principal				はい		
+					Service			はい	誰が引き受けるか	Cloudformationが
+										
+S3Bucket										この環境で使うストレージ
+	DeletionPolicy							いいえ	"スタック削除時にリソースを残すか設定
+デフォルトは削除"	Retain：残す
+	Type							はい	リソースのタイプを設定	S3 Bucket
+	Description							いいえ	メモ	
+	Properties							はい	詳細設定	
+		BucketName						いいえ	バケット名	
+		VersioningConfiguration:						いいえ	バージョン管理	
+			Status					はい	有効・無効	有効
+		Tags						いいえ	タグ	
+			Value					はい	値	
+			Key					はい	タグキー	
+										
+ToolChainRole										EC2 インスタンス用の IAM ロール
+	DeletionPolicy							いいえ	"スタック削除時にリソースを残すか設定
+デフォルトは削除"	
+	Type							はい	リソースのタイプを設定	Retain：残す
+	Description							いいえ	メモ	IAM Role
+	Properties							はい	詳細設定	
+		Path						いいえ	"ロールへのパス
+デフォルトは「/」"	「/」ルート
+		ManagedPolicyArns						いいえ	ロールにアタッチする管理ポリシーのARN設定	"以下を設定
+AdministratorAccess-AWSElasticBeanstalk
+AmazonS3FullAccess
+AWSCodeBuildAdminAccess
+AWSCodeCommitFullAccess
+AWSCodeDeployFullAccess
+AWSCodePipeline_FullAccess
+AWSCodeStarFullAccess
+AWSLambda_FullAccess
+CloudWatchEventsFullAccess
+CloudWatchLogsFullAccess"
+		RoleName						いいえ	"ロール名
+デフォルトは自動生成のID"	
+		Policies						いいえ	このロールのポリシーを設定	詳細は略
+			PolicyName					はい		
+			PolicyDocument					はい		
+				Statement				はい		
+					Action			はい		
+					Resource			はい		
+					Effect			はい		
+			AssumeRolePolicyDocument					はい		
+				Statement				はい		
+					Action			はい		
+					Effect			はい		
+					Principal			はい		
+						Service		はい		"下記が引き受け
+codebuild.amazonaws.com
+codedeploy.amazonaws.com
+codepipeline.amazonaws.com
+codestar.amazonaws.com
+elasticbeanstalk.amazonaws.com
+events.amazonaws.com
+lambda.amazonaws.com"
+			PermissionsBoundary					いいえ	"ロールの権限境界を設定
+ポリシーのARNを設定"	
